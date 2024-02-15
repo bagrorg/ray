@@ -1,4 +1,5 @@
-mkdir build
-cmake -B build .
+mkdir -p build
+cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -B build .
+cp build/compile_commands.json ./
 cmake --build build
 
