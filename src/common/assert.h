@@ -7,21 +7,28 @@
 #define RAY_VERIFY(expr,...) \
 	do { \
 		if (!(expr)) { \
-			fprintf(stderr, "Assertion failed: ");\
+			fprintf(stderr, "Assertion failed at %s:%d: ", __FILE__, __LINE__);\
 			fprintf(stderr, __VA_ARGS__); \
 			fprintf(stderr, "\n"); \
 			exit(EXIT_FAILURE); \
 		}\
 	} while (0)
 
+
+#define RAY_WARNING(...) \
+	do { \
+		fprintf(stderr, "Warning at %s:%d: ", __FILE__, __LINE__);\
+		fprintf(stderr, __VA_ARGS__); \
+		fprintf(stderr, "\n"); \
+		exit(EXIT_FAILURE); \
+	} while (0)
+
 #define RAY_FAIL(...) \
 	do { \
-		if (!(expr)) { \
-			fprintf(stderr, "Execution failed: ");\
-			fprintf(stderr, __VA_ARGS__); \
-			fprintf(stderr, "\n"); \
-			exit(EXIT_FAILURE); \
-		}\
+		fprintf(stderr, "Execution failed at %s:%d: ", __FILE__, __LINE__);\
+		fprintf(stderr, __VA_ARGS__); \
+		fprintf(stderr, "\n"); \
+		exit(EXIT_FAILURE); \
 	} while (0)
 
 #endif

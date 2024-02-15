@@ -65,7 +65,6 @@ typedef struct {
 } camera;
 ///////////// //////////////// ///////////////
 
-
 typedef struct {
 	RGB bg;
 	camera cam;
@@ -74,6 +73,9 @@ typedef struct {
 	ellipsoids elps;
 	boxes bxs;
 } scene;
+
+scene new_scene(size_t boxes, size_t ellipses, size_t planes);
+void free_scene(scene *s);
 
 void print_scene(const scene *s);
 
