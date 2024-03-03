@@ -8,11 +8,11 @@ void print_RGB(RGB rgb) {
 }
 
 void print_vec3(vec3 v) {
-	printf("(%.4f, %.4f, %.4f)", v.x, v.y, v.z);
+	printf("(%.4f, %.4f, %.4f)", v[0], v[1], v[2]);
 }
 
 void print_vec4(vec4 v) {
-	printf("(%.4f, %.4f, %.4f, %.4f)", v.x, v.y, v.z, v.w);
+	printf("(%.4f, %.4f, %.4f, %.4f)", v[0], v[1], v[2], v[3]);
 }
 
 void print_comm_data(const comm_data *data, size_t i) {

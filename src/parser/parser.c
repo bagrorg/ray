@@ -75,15 +75,15 @@ void process_vec3(char *line, vec3 *dst) {
 
 	token = strtok(NULL, " ");
 	RAY_VERIFY(token != NULL, "vec3 line has less than 3 arguments!");
-	dst->x = atof(token);
+	(*dst)[0] = atof(token);
 
 	token = strtok(NULL, " ");
 	RAY_VERIFY(token != NULL, "vec3 line has less than 3 arguments!");
-	dst->y = atof(token);
+	(*dst)[1] = atof(token);
 
 	token = strtok(NULL, " ");
 	RAY_VERIFY(token != NULL, "vec3 line has less than 3 arguments!");
-	dst->z = atof(token);
+	(*dst)[2] = atof(token);
 }
 
 void process_vec4(char *line, vec4 *dst) {
@@ -93,19 +93,19 @@ void process_vec4(char *line, vec4 *dst) {
 
 	token = strtok(NULL, " ");
 	RAY_VERIFY(token != NULL, "vec4 line has less than 4 arguments!");
-	dst->x = atof(token);
+	(*dst)[0] = atof(token);
 
 	token = strtok(NULL, " ");
 	RAY_VERIFY(token != NULL, "vec4 line has less than 4 arguments!");
-	dst->y = atof(token);
+	(*dst)[1] = atof(token);
 
 	token = strtok(NULL, " ");
 	RAY_VERIFY(token != NULL, "vec4 line has less than 4 arguments!");
-	dst->z = atof(token);
+	(*dst)[2] = atof(token);
 
 	token = strtok(NULL, " ");
 	RAY_VERIFY(token != NULL, "vec4 line has less than 4 arguments!");
-	dst->w = atof(token);
+	(*dst)[3] = atof(token);
 }
 
 void prealloc_data(FILE *f, scene *s) {
@@ -171,8 +171,9 @@ scene parse(const char *path) {
 			process_float(line, &s.cam.fov_x);
 		} else if (strncmp(NEW_PRIMITIVE, line, strlen(NEW_PRIMITIVE)) == 0) {
 			if (cur != NULL) {
-				cur_data->pos[*cur] = pos;
-				cur_data->rot[*cur] = rot;
+				memcpy(&cur_data->pos[*cur], &pos, sizeof(pos));
+				memcpy(&cur_data->rot[*cur], &rot, sizeof(rot));
+
 				cur_data->col[*cur] = col;
 				*cur += 1;
 
@@ -180,18 +181,18 @@ scene parse(const char *path) {
 				cur_data = NULL;
 			} 
 
-			pos.x = 0;
-			pos.y = 0;
-			pos.z = 0;
+			pos[0] = 0;
+			pos[1] = 0;
+			pos[2] = 0;
 
 			col.r = 0;
 			col.g = 0;
 			col.b = 0;
 
-			rot.x = 0;
-			rot.y = 0;
-			rot.z = 0;
-			rot.w = 1;
+			rot[0] = 0;
+			rot[1] = 0;
+			rot[2] = 0;
+			rot[3] = 1;
 		} else if (strncmp(PLANE, line, strlen(PLANE)) == 0) {
 			cur = &cur_plane;
 			cur_data = &s.plns.comm_data;
@@ -217,9 +218,8 @@ scene parse(const char *path) {
 	
 	RAY_VERIFY(cur != NULL, "Corrupted scene file! No primitives provided!");
 
-	cur_data->pos[*cur] = pos;
-	cur_data->rot[*cur] = rot;
-	cur_data->col[*cur] = col;
+	memcpy(&cur_data->pos[*cur], &pos, sizeof(pos));
+	memcpy(&cur_data->rot[*cur], &rot, sizeof(rot));
 	*cur += 1;
 
 	RAY_VERIFY(cur_box == s.bxs.n, "Parsed %ld boxes, but %ld expected!", cur_box, s.bxs.n);
