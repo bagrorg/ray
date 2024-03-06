@@ -121,9 +121,9 @@ void prealloc_data(FILE *f, scene *s) {
 		if (strncmp(BOX, line, strlen(BOX)) == 0) {
 			boxes_cnt++;
 		} else if (strncmp(PLANE, line, strlen(PLANE)) == 0) {
-			ellipsoids_cnt++;
-		} else if (strncmp(ELLIPSOID, line, strlen(ELLIPSOID)) == 0) {
 			planes_cnt++;
+		} else if (strncmp(ELLIPSOID, line, strlen(ELLIPSOID)) == 0) {
+			ellipsoids_cnt++;
 		}
 	}
 	
@@ -220,6 +220,7 @@ scene parse(const char *path) {
 
 	memcpy(&cur_data->pos[*cur], &pos, sizeof(pos));
 	memcpy(&cur_data->rot[*cur], &rot, sizeof(rot));
+	cur_data->col[*cur] = col;
 	*cur += 1;
 
 	RAY_VERIFY(cur_box == s.bxs.n, "Parsed %ld boxes, but %ld expected!", cur_box, s.bxs.n);

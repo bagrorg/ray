@@ -1,1 +1,2 @@
-add_library(render render.c)
+add_library(render ray.c)
+target_link_libraries(render common cglm)
