@@ -1,7 +1,5 @@
 #include "ray.h"
 
-#include "cglm/call/vec3.h"
-#include "cglm/cglm.h"
 #include "cglm/types.h"
 
 #include "cglm/vec3.h"
@@ -15,84 +13,70 @@ void swap(float *t1, float *t2) {
 	*t2 = tmp;
 }
 
-bool intersect_box(const ray *r, const vec3 *szs, const vec3 *pos, const vec4 *rot, const RGB *col, RGB *dest_col, float *dist) {
+ray prepare_ray(const ray *r, const vec3 *pos, const vec4 *rot) {
+  ray r_new;
+
 	vec4 q_;
 	glm_quat_inv(*rot, q_);
 
-	vec3 adj_r_o_tmp;
-	vec3 adj_r_o;
-	glm_vec3_sub(r->o, pos, adj_r_o_tmp);
-	glm_quat_rotatev(q_, adj_r_o_tmp, adj_r_o);
+	glm_vec3_sub(r->o, *pos, r_new.o);
+	glm_quat_rotatev(q_, r_new.o, r_new.o);     // POTENTIALLY DANGEROUS
 
-	vec3 adj_r_d;
-	glm_quat_rotatev(q_, r->d, adj_r_d);
+	glm_quat_rotatev(q_, r->d, r_new.d);
 
+  return r_new;
+}
 
-	float t1x, t2x, t1y, t2y, t1z, t2z;	
+bool intersect_box(const ray *r, const vec3 *szs, const vec3 *pos, const vec4 *rot, const RGB *col, RGB *dest_col, float *dist) {
+  ray adj_r = prepare_ray(r, pos, rot);
 
-	t1x = ( (*szs)[0] - adj_r_o[0]) / adj_r_d[0];
-	t2x = (-(*szs)[0] - adj_r_o[0]) / adj_r_d[0];
+  vec3 ts1, ts2;
+  glm_vec3_copy(*szs, ts1);
+  glm_vec3_copy(*szs, ts2);
+  glm_vec3_scale(ts1, -1, ts1);
 
-	t1y = ( (*szs)[1] - adj_r_o[1]) / adj_r_d[1];
-	t2y = (-(*szs)[1] - adj_r_o[1]) / adj_r_d[1];
+  glm_vec3_sub(ts1, adj_r.o, ts1);
+  glm_vec3_sub(ts2, adj_r.o, ts2);
 
-	t1z = ( (*szs)[2] - adj_r_o[2]) / adj_r_d[2];
-	t2z = (-(*szs)[2] - adj_r_o[2]) / adj_r_d[2];
+  glm_vec3_div(ts1, adj_r.d, ts1);
+  glm_vec3_div(ts2, adj_r.d, ts2);
 
-	if (t1x > t2x) {
-		swap(&t1x, &t2x);
-	}
+  for (size_t i = 0; i < 3; i++) {
+    if (ts1[i] > ts2[i]) {
+      float tmp = ts1[i];
+      ts1[i] = ts2[i];
+      ts2[i] = tmp;
+    } 
+  }
 
-	if (t1y > t2y) {
-		swap(&t1y, &t2y);
-	}
-
-	if (t1z > t2z) {
-		swap(&t1z, &t2z);
-	}
-
-	float t1 = fmaxf(t1x, fmaxf(t1y, t1z));
-	float t2 = fmaxf(t2x, fmaxf(t2y, t2z));
+  float t1 = fmaxf(ts1[0], fmaxf(ts1[1], ts1[2]));
+  float t2 = fminf(ts2[0], fminf(ts2[1], ts2[2]));
 
 	if (t1 > t2) {
 		return false;
 	}
 
-	if (t1 > 0) {
+	if (t1 >= 0) {
 		// t1 -- nearest solution
 		*dist = t1;
 		*dest_col = *col;
 		return true;
 	}
 
-	if (t1 < 0 && t2 > 0) {
-		// inside sphere, t2 -- front solution
+	if (t2 >= 0) {
+		// t1 -- nearest solution
 		*dist = t2;
 		*dest_col = *col;
 		return true;
-	}
-
-	if (t2 < 0) {
-		// Sphere is behind, TODO delete this branch?
-		return false;
 	}
 
 	return false;
 }
 
 bool intersect_plane(const ray *r, const vec3 *nrm, const vec3 *pos, const vec4 *rot, const RGB *col, RGB *dest_col, float *dist) {
-	vec4 q_;
-	glm_quat_inv(*rot, q_);
+  ray adj_r = prepare_ray(r, pos, rot);
 
-	vec3 adj_r_o_tmp;
-	vec3 adj_r_o;
-	glm_vec3_sub(r->o, pos, adj_r_o_tmp);
-	glm_quat_rotatev(q_, adj_r_o_tmp, adj_r_o);
-
-	vec3 adj_r_d;
-	glm_quat_rotatev(q_, r->d, adj_r_d);
-
-	float t = -glm_vec3_dot(adj_r_o, *nrm) / glm_vec3_dot(adj_r_d, *nrm);
+	float t = -glm_vec3_dot(adj_r.o, *nrm) / glm_vec3_dot(adj_r.d, *nrm);
 	
 	if (t >= 0) {
 		*dist = t;
@@ -104,20 +88,11 @@ bool intersect_plane(const ray *r, const vec3 *nrm, const vec3 *pos, const vec4 
 }
 
 bool intersect_ellipsoid(const ray *r, const vec3 *rads, const vec3 *pos, const vec4 *rot, const RGB *col, RGB *dest_col, float *dist) {
-	vec4 q_;
-	glm_quat_inv(*rot, q_);
-
-	vec3 adj_r_o_tmp;
-	vec3 adj_r_o;
-	glm_vec3_sub(r->o, *pos, adj_r_o_tmp);
-	glm_quat_rotatev(q_, adj_r_o_tmp, adj_r_o);
-
-	vec3 adj_r_d;
-	glm_quat_rotatev(q_, r->d, adj_r_d);
+  ray adj_r = prepare_ray(r, pos, rot);
 
 	vec3 dr, or;
-	glm_vec3_div(adj_r_o, *rads, or);
-	glm_vec3_div(adj_r_d, *rads, dr);
+	glm_vec3_div(adj_r.o, *rads, or);
+	glm_vec3_div(adj_r.d, *rads, dr);
 
 	float a, b, c;
 	a = glm_vec3_dot(dr, dr);
@@ -130,12 +105,12 @@ bool intersect_ellipsoid(const ray *r, const vec3 *rads, const vec3 *pos, const 
 	}
 	float Dsqrt = sqrtf(D);
 
-	float t1 = (Dsqrt + b) / (2 * a);
-	float t2 = (Dsqrt - b) / (2 * a);
-	if (t2 > t1) {
+	float t1 = (-Dsqrt + b) / (2 * a);
+	float t2 = (-Dsqrt - b) / (2 * a);
+	if (t2 < t1) {
 		swap(&t1, &t2);
 	}
-	
+
 	if (t1 > 0) {
 		// t1 -- nearest solution
 		*dist = t1;
@@ -248,7 +223,7 @@ RGB *render(const scene *s) {
 			glm_vec3_copy(s->cam.pos, r.o);
 
 			float px = (2 * (float) x / s->cam.w - 1) * tanf(s->cam.fov_x / 2);
-			float py = (2 * (float) y / s->cam.h - 1) * tanf(       fov_y / 2);
+			float py = -(2 * (float) y / s->cam.h - 1) * tanf(       fov_y / 2);
 
       vec3 tmp;
       glm_vec3_copy(s->cam.frwrd, r.d);
