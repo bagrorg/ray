@@ -27,7 +27,10 @@ ray prepare_ray(const ray *r, const vec3 *pos, const vec4 *rot) {
   return r_new;
 }
 
-bool intersect_box(const ray *r, const vec3 *szs, const vec3 *pos, const vec4 *rot, const RGB *col, RGB *dest_col, float *dist) {
+intsec intersect_box(const ray *r, const vec3 *szs, const vec3 *pos, const vec4 *rot, const RGB *col) {
+  intsec i = {
+    .succ = false
+  };
   ray adj_r = prepare_ray(r, pos, rot);
 
   vec3 ts1, ts2;
@@ -53,41 +56,49 @@ bool intersect_box(const ray *r, const vec3 *szs, const vec3 *pos, const vec4 *r
   float t2 = fminf(ts2[0], fminf(ts2[1], ts2[2]));
 
 	if (t1 > t2) {
-		return false;
+    return i;
 	}
 
 	if (t1 >= 0) {
 		// t1 -- nearest solution
-		*dist = t1;
-		*dest_col = *col;
-		return true;
+    i.t = t1;
+    i.col = *col;
+    i.succ = true;
+    return i;
 	}
 
 	if (t2 >= 0) {
 		// t1 -- nearest solution
-		*dist = t2;
-		*dest_col = *col;
-		return true;
+    i.t = t2;
+    i.col = *col;
+    i.succ = true;
+    return i;
 	}
 
-	return false;
+  return i;
 }
 
-bool intersect_plane(const ray *r, const vec3 *nrm, const vec3 *pos, const vec4 *rot, const RGB *col, RGB *dest_col, float *dist) {
+intsec intersect_plane(const ray *r, const vec3 *nrm, const vec3 *pos, const vec4 *rot, const RGB *col) {
+  intsec i = {
+    .succ = false,
+  };
   ray adj_r = prepare_ray(r, pos, rot);
 
 	float t = -glm_vec3_dot(adj_r.o, *nrm) / glm_vec3_dot(adj_r.d, *nrm);
 	
 	if (t >= 0) {
-		*dist = t;
-		*dest_col = *col;
-		return true;
+    i.succ = true;
+    i.t = t;
+    i.col = *col;
 	}
 
-	return false;
+  return i;
 }
 
-bool intersect_ellipsoid(const ray *r, const vec3 *rads, const vec3 *pos, const vec4 *rot, const RGB *col, RGB *dest_col, float *dist) {
+intsec intersect_ellipsoid(const ray *r, const vec3 *rads, const vec3 *pos, const vec4 *rot, const RGB *col) {
+  intsec i = {
+    .succ = false,
+  };
   ray adj_r = prepare_ray(r, pos, rot);
 
 	vec3 dr, or;
@@ -101,7 +112,7 @@ bool intersect_ellipsoid(const ray *r, const vec3 *rads, const vec3 *pos, const 
 
 	float D = b * b - 4 * a * c;
 	if (D < 0) {
-		return false;
+		return i;
 	}
 	float Dsqrt = sqrtf(D);
 
@@ -113,24 +124,20 @@ bool intersect_ellipsoid(const ray *r, const vec3 *rads, const vec3 *pos, const 
 
 	if (t1 > 0) {
 		// t1 -- nearest solution
-		*dist = t1;
-		*dest_col = *col;
-		return true;
-	}
-
-	if (t1 < 0 && t2 > 0) {
+    i.t = t1;
+    i.succ = true;
+    i.col = *col;
+	} else if (t1 < 0 && t2 > 0) {
 		// inside sphere, t2 -- front solution
-		*dist = t2;
-		*dest_col = *col;
-		return true;
-	}
-
-	if (t2 < 0) {
+    i.t = t2;
+    i.succ = true;
+    i.col = *col;
+	} else if (t2 < 0) {
 		// Sphere is behind, TODO delete this branch?
-		return false;
+    return i;
 	}
 
-	return false;
+  return i;
 }
 
 RGB process_ray(const scene *s, const ray *r) {
@@ -143,21 +150,17 @@ RGB process_ray(const scene *s, const ray *r) {
 	RGB col = s->bg;
 
 	for (size_t i = 0; i < b_cnt; i++) {
-		float tmp_t;
-		RGB tmp_c;
-		bool succ = intersect_box(
+		intsec res = intersect_box(
 				r, 
 				&s->bxs.szs[i], 
 				&s->bxs.comm_data.pos[i],
 				&s->bxs.comm_data.rot[i], 
-				&s->bxs.comm_data.col[i], 
-				&tmp_c, 
-				&tmp_t);
+				&s->bxs.comm_data.col[i]);
 		
-		if (succ) {
-			if ((intersected && tmp_t < t) || !intersected) {
-				t = tmp_t;
-				col = tmp_c;
+		if (res.succ) {
+			if ((intersected && res.t < t) || !intersected) {
+				t = res.t;
+				col = res.col;
 			}
 
 			intersected = true;
@@ -165,21 +168,17 @@ RGB process_ray(const scene *s, const ray *r) {
 	}
 
 	for (size_t i = 0; i < p_cnt; i++) {
-		float tmp_t;
-		RGB tmp_c;
-		bool succ = intersect_plane(
+	    intsec res = intersect_plane(
 				r, 
 				&s->plns.nrms[i], 
 				&s->plns.comm_data.pos[i],
 				&s->plns.comm_data.rot[i], 
-				&s->plns.comm_data.col[i], 
-				&tmp_c, 
-				&tmp_t);
+				&s->plns.comm_data.col[i]);
 		
-		if (succ) {
-			if ((intersected && tmp_t < t) || !intersected) {
-				t = tmp_t;
-				col = tmp_c;
+		if (res.succ) {
+			if ((intersected && res.t < t) || !intersected) {
+				t = res.t;
+				col = res.col;
 			}
 
 			intersected = true;
@@ -187,21 +186,17 @@ RGB process_ray(const scene *s, const ray *r) {
 	}
 
 	for (size_t i = 0; i < e_cnt; i++) {
-		float tmp_t;
-		RGB tmp_c;
-		bool succ = intersect_ellipsoid(
+		intsec res = intersect_ellipsoid(
 				r, 
 				&s->elps.rads[i], 
 				&s->elps.comm_data.pos[i],
 				&s->elps.comm_data.rot[i], 
-				&s->elps.comm_data.col[i], 
-				&tmp_c, 
-				&tmp_t);
+				&s->elps.comm_data.col[i]);
 		
-		if (succ) {
-			if ((intersected && tmp_t < t) || !intersected) {
-				t = tmp_t;
-				col = tmp_c;
+		if (res.succ) {
+			if ((intersected && res.t < t) || !intersected) {
+				t = res.t;
+				col = res.col;
 			}
 
 			intersected = true;
@@ -222,8 +217,8 @@ RGB *render(const scene *s) {
 			ray r;
 			glm_vec3_copy(s->cam.pos, r.o);
 
-			float px = (2 * (float) x / s->cam.w - 1) * tanf(s->cam.fov_x / 2);
-			float py = -(2 * (float) y / s->cam.h - 1) * tanf(       fov_y / 2);
+			float px =  (2 * ((float) x + 0.5) / s->cam.w - 1) * tanf(s->cam.fov_x / 2);
+			float py = -(2 * ((float) y + 0.5) / s->cam.h - 1) * tanf(       fov_y / 2);
 
       vec3 tmp;
       glm_vec3_copy(s->cam.frwrd, r.d);
