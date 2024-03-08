@@ -13,25 +13,34 @@ void swap(float *t1, float *t2) {
 	*t2 = tmp;
 }
 
-ray prepare_ray(const ray *r, const vec3 *pos, const vec4 *rot) {
-  ray r_new;
-
+void prepare_ray(const ray *r, const vec3 *pos, const vec4 *rot, ray *r_new) {
 	vec4 q_;
 	glm_quat_inv(*rot, q_);
 
-	glm_vec3_sub(r->o, *pos, r_new.o);
-	glm_quat_rotatev(q_, r_new.o, r_new.o);     // POTENTIALLY DANGEROUS
+	glm_vec3_sub(r->o, *pos, r_new->o);
+	glm_quat_rotatev(q_, r_new->o, r_new->o);     // POTENTIALLY DANGEROUS
 
-	glm_quat_rotatev(q_, r->d, r_new.d);
+	glm_quat_rotatev(q_, r->d, r_new->d);
+}
 
-  return r_new;
+void postprocess_normal(vec3 *N, const vec4 *rot) {
+  glm_quat_rotatev(*rot, *N, *N); 
+}
+
+void compute_int_point(const ray *r, float t, vec3 *P) {
+    vec3 step;
+    glm_vec3_copy(r->o, *P);
+    glm_vec3_copy(r->d, step);
+    glm_vec3_scale(step, t, step);
+    glm_vec3_add(*P, step, *P);
 }
 
 intsec intersect_box(const ray *r, const vec3 *szs, const vec3 *pos, const vec4 *rot, const RGB *col) {
   intsec i = {
     .succ = false
   };
-  ray adj_r = prepare_ray(r, pos, rot);
+  ray adj_r;
+  prepare_ray(r, pos, rot, &adj_r);
 
   vec3 ts1, ts2;
   glm_vec3_copy(*szs, ts1);
@@ -64,16 +73,27 @@ intsec intersect_box(const ray *r, const vec3 *szs, const vec3 *pos, const vec4 
     i.t = t1;
     i.col = *col;
     i.succ = true;
-    return i;
-	}
-
-	if (t2 >= 0) {
+	} else if (t2 >= 0) {
 		// t1 -- nearest solution
     i.t = t2;
     i.col = *col;
     i.succ = true;
-    return i;
 	}
+
+  if (i.succ) {
+    vec3 P;
+    compute_int_point(&adj_r, i.t, &P);
+    glm_vec3_div(P, *szs, P);
+    for (size_t i = 0; i < 3; i++) {
+      if (fabs(P[i] - 1.0) > 0.00001) {
+        P[i] = 0.0;
+      }
+    }
+    glm_vec3_copy(P, i.N);
+    glm_vec3_normalize(i.N);
+    
+    postprocess_normal(&i.N, rot);
+  }
 
   return i;
 }
@@ -82,7 +102,8 @@ intsec intersect_plane(const ray *r, const vec3 *nrm, const vec3 *pos, const vec
   intsec i = {
     .succ = false,
   };
-  ray adj_r = prepare_ray(r, pos, rot);
+  ray adj_r;
+  prepare_ray(r, pos, rot, &adj_r);
 
 	float t = -glm_vec3_dot(adj_r.o, *nrm) / glm_vec3_dot(adj_r.d, *nrm);
 	
@@ -90,6 +111,9 @@ intsec intersect_plane(const ray *r, const vec3 *nrm, const vec3 *pos, const vec
     i.succ = true;
     i.t = t;
     i.col = *col;
+    glm_vec3_copy(*nrm, i.N);
+    glm_vec3_normalize(i.N);
+    postprocess_normal(&i.N, rot);
 	}
 
   return i;
@@ -99,7 +123,8 @@ intsec intersect_ellipsoid(const ray *r, const vec3 *rads, const vec3 *pos, cons
   intsec i = {
     .succ = false,
   };
-  ray adj_r = prepare_ray(r, pos, rot);
+  ray adj_r;
+  prepare_ray(r, pos, rot, &adj_r);
 
 	vec3 dr, or;
 	glm_vec3_div(adj_r.o, *rads, or);
@@ -137,6 +162,15 @@ intsec intersect_ellipsoid(const ray *r, const vec3 *rads, const vec3 *pos, cons
     return i;
 	}
 
+  if (i.succ) {
+    vec3 P, R2;
+    compute_int_point(&adj_r, i.t, &P);
+    glm_vec3_mul(*rads, *rads, R2); 
+    glm_vec3_div(P, R2, i.N);
+    glm_vec3_normalize(i.N);
+    postprocess_normal(&i.N, rot);
+  }
+
   return i;
 }
 
@@ -160,7 +194,10 @@ RGB process_ray(const scene *s, const ray *r) {
 		if (res.succ) {
 			if ((intersected && res.t < t) || !intersected) {
 				t = res.t;
-				col = res.col;
+				//col = res.col;
+		    col.r = 255.0 * res.N[0];	
+		    col.g = 255.0 * res.N[1];	
+		    col.b = 255.0 * res.N[2];	
 			}
 
 			intersected = true;
@@ -178,8 +215,11 @@ RGB process_ray(const scene *s, const ray *r) {
 		if (res.succ) {
 			if ((intersected && res.t < t) || !intersected) {
 				t = res.t;
-				col = res.col;
-			}
+				//col = res.col;
+		    col.r = 255.0 * res.N[0];	
+		    col.g = 255.0 * res.N[1];	
+		    col.b = 255.0 * res.N[2];	
+      }
 
 			intersected = true;
 		}
@@ -196,7 +236,10 @@ RGB process_ray(const scene *s, const ray *r) {
 		if (res.succ) {
 			if ((intersected && res.t < t) || !intersected) {
 				t = res.t;
-				col = res.col;
+				//col = res.col;
+		    col.r = 255.0 * res.N[0];	
+		    col.g = 255.0 * res.N[1];	
+		    col.b = 255.0 * res.N[2];	
 			}
 
 			intersected = true;
