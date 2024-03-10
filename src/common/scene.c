@@ -7,71 +7,50 @@ void print_RGB(RGB rgb) {
 	printf("(%u, %u, %u)", rgb.r, rgb.g, rgb.b);
 }
 
-void print_vec3(vec3 v) {
+void print_vec3(const vec3 v) {
 	printf("(%.4f, %.4f, %.4f)", v[0], v[1], v[2]);
 }
 
-void print_vec4(vec4 v) {
+void print_vec4(const vec4 v) {
 	printf("(%.4f, %.4f, %.4f, %.4f)", v[0], v[1], v[2], v[3]);
 }
 
-void print_comm_data(const comm_data *data, size_t i) {
+void print_common_data(const primitive *p) {
 	printf("\t\t\tposition = ");
-	print_vec3(data->pos[i]);
+	print_vec3(p->position);
 	printf("\n");
 
 	printf("\t\t\trotation = ");
-	print_vec4(data->rot[i]);
+	print_vec4(p->rotation);
 	printf("\n");
 
 	printf("\t\t\tcolor = ");
-	print_RGB(data->col[i]);
+	print_RGB(p->colour);
 	printf("\n");
 }
 
-void print_planes(const planes *p) {
-	printf("\tPLANES:\n");
-	for (size_t i = 0; i < p->n; i++) {
-		printf("\t\tPLANE #%ld:\n", i);
-
-		printf("\t\t\tnormal = ");
-		print_vec3(p->nrms[i]);
-		printf("\n");
-
-		print_comm_data(&p->comm_data, i);
-	}
-	printf("\n");
-	printf("\n");
+void print_planes(const primitive *p) {
+	printf("\tPLANE:\n");
+  print_common_data(p);  
+  printf("\t\t\tnormal = ");
+  print_vec3(p->normal);
+  printf("\n\n");
 }
 
-void print_boxes(const boxes *b) {
+void print_boxes(const primitive *p) {
 	printf("\tBOXES:\n");
-	for (size_t i = 0; i < b->n; i++) {
-		printf("\t\tBOX #%ld:\n", i);
-
-		printf("\t\t\tsizes = ");
-		print_vec3(b->szs[i]);
-		printf("\n");
-
-		print_comm_data(&b->comm_data, i);
-	}
-	printf("\n");
-	printf("\n");
+  print_common_data(p);  
+  printf("\t\t\tsizes = ");
+  print_vec3(p->sizes);
+  printf("\n\n");
 }
 
-void print_ellipsoids(const ellipsoids *e) {
+void print_ellipsoids(const primitive *p) {
 	printf("\tELLIPSOIDS:\n");
-	for (size_t i = 0; i < e->n; i++) {
-		printf("\t\tELLIPSOID #%ld:\n", i);
-
-		printf("\t\t\tradiuses = ");
-		print_vec3(e->rads[i]);
-		printf("\n");
-
-		print_comm_data(&e->comm_data, i);
-	}
-	printf("\n");
-	printf("\n");
+  print_common_data(p);  
+  printf("\t\t\tradiuses = ");
+  print_vec3(p->radius);
+  printf("\n\n");
 }
 
 void print_cam(const camera *c) {
@@ -109,85 +88,21 @@ void print_scene(const scene *s) {
 	printf("\n");
 
 	print_cam(&s->cam);
-	print_planes(&s->plns);
-	print_boxes(&s->bxs);
-	print_ellipsoids(&s->elps);
-}
+  
+  for (size_t i = 0; i < s->primitives.size; i++) {
+    primitive *p = &((primitive*)s->primitives.data)[i];
 
-comm_data new_comm_data(size_t cnt) { 
-	comm_data data = {
-		.col = malloc(sizeof(*data.col) * cnt),
-		.pos = malloc(sizeof(*data.pos) * cnt),
-		.rot = malloc(sizeof(*data.rot) * cnt)
-	};
-
-	return data;
-}
-
-planes new_planes(size_t planes_cnt) {
-	planes p = {
-		.n = planes_cnt,
-		.nrms = malloc(sizeof(*p.nrms) * planes_cnt),
-		.comm_data = new_comm_data(planes_cnt),
-	};
-
-	return p;
-}
-
-boxes new_boxes(size_t boxes_cnt) {
-	boxes b = {
-		.n = boxes_cnt,
-		.szs = malloc(sizeof(*b.szs) * boxes_cnt),
-		.comm_data = new_comm_data(boxes_cnt),
-	};
-	
-	return b;
-}
-
-ellipsoids new_ellipsoids(size_t ellipsoids_cnt) {
-	ellipsoids e = {
-		.n = ellipsoids_cnt,
-		.rads = malloc(sizeof(*e.rads) * ellipsoids_cnt),
-		.comm_data = new_comm_data(ellipsoids_cnt),
-	};
-	
-	return e;
-}
-
-scene new_scene(size_t boxes_cnt, size_t ellipsoids_cnt, size_t planes_cnt) {
-	scene s = {
-		.bxs = new_boxes(boxes_cnt),
-		.elps = new_ellipsoids(ellipsoids_cnt),
-		.plns = new_planes(planes_cnt),
-	};
-	
-	return s;
-}
-
-void free_comm_data(comm_data *data) {
-	free(data->rot);
-	free(data->pos);
-	free(data->col);
-}
-
-void free_boxes(boxes *b) {
-	free(b->szs);
-	free_comm_data(&b->comm_data);
-}
-
-void free_planes(planes *p) {
-	free(p->nrms);
-	free_comm_data(&p->comm_data);
-}
-
-void free_ellipsoids(ellipsoids *e) {
-	free(e->rads);
-	free_comm_data(&e->comm_data);
-}
-
-void free_scene(scene *s) {
-	free_boxes(&s->bxs);
-	free_planes(&s->plns);
-	free_ellipsoids(&s->elps);
+    switch (p->type) {
+      case PRIMITIVE_BOX:
+        print_boxes(p);
+        break;
+      case PRIMITIVE_PLANE:
+        print_planes(p);
+        break;
+      case PRIMITIVE_ELLIPSOID:
+        print_ellipsoids(p);
+        break;
+    }
+  }
 }
 

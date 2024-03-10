@@ -21,6 +21,13 @@ static const char *BOX = "BOX";
 static const char *POSITION = "POSITION";
 static const char *ROTATION = "ROTATION";
 static const char *COLOUR = "COLOR";
+static const char *NEW_LIGHT = "NEW_LIGHT";
+static const char *AMBIENT_LIGHT = "AMBIENT_LIGHT";
+static const char *LIGHT_INTENSITY = "LIGHT_INTENSITY";
+static const char *LIGHT_DIRECTION = "LIGHT_DIRECTION";
+static const char *LIGHT_POSITION = "LIGHT_POSITION";
+static const char *LIGHT_ATTENUATION = "LIGHT_ATTENUATION";
+
 
 void process_dimensions(char *line, scene *s) {
 	char *token = strtok(line, " ");
@@ -108,30 +115,6 @@ void process_vec4(char *line, vec4 *dst) {
 	(*dst)[3] = atof(token);
 }
 
-void prealloc_data(FILE *f, scene *s) {
-	char *line = NULL;
-	size_t len;
-	ssize_t res;
-
-	size_t boxes_cnt = 0;
-	size_t ellipsoids_cnt = 0;
-	size_t planes_cnt = 0;
-
-	while ((res = getline(&line, &len, f)) != -1) {
-		if (strncmp(BOX, line, strlen(BOX)) == 0) {
-			boxes_cnt++;
-		} else if (strncmp(PLANE, line, strlen(PLANE)) == 0) {
-			planes_cnt++;
-		} else if (strncmp(ELLIPSOID, line, strlen(ELLIPSOID)) == 0) {
-			ellipsoids_cnt++;
-		}
-	}
-	
-	*s = new_scene(boxes_cnt, ellipsoids_cnt, planes_cnt);
-
-	fseek(f, 0, SEEK_SET);
-}
-
 scene parse(const char *path) {
 	ssize_t res;
 	size_t len;
@@ -141,18 +124,11 @@ scene parse(const char *path) {
 	RAY_VERIFY(f != NULL, "Problems with opening scene file (%s)", strerror(errno));
 
 	scene s;	
-	vec3 pos;
-	RGB col;
-	vec4 rot;
+  primitive *p;
+  init(&s.primitives, sizeof *p);
 
-	size_t cur_plane = 0;
-	size_t cur_box = 0;
-	size_t cur_ellipsoid = 0;
-
-	size_t *cur = NULL;
-	comm_data *cur_data = NULL;
-
-	prealloc_data(f, &s);
+  vec3 default_pos = {0, 0, 1};
+  vec4 default_rotation = {0, 0, 0, 1};
 
 	while ((res = getline(&line, &len, f)) != -1) {
 		if (strncmp(DIMENSIONS, line, strlen(DIMENSIONS)) == 0) {
@@ -170,64 +146,39 @@ scene parse(const char *path) {
 		} else if (strncmp(CAMERA_FOV_X, line, strlen(CAMERA_FOV_X)) == 0) {
 			process_float(line, &s.cam.fov_x);
 		} else if (strncmp(NEW_PRIMITIVE, line, strlen(NEW_PRIMITIVE)) == 0) {
-			if (cur != NULL) {
-				memcpy(&cur_data->pos[*cur], &pos, sizeof(pos));
-				memcpy(&cur_data->rot[*cur], &rot, sizeof(rot));
-
-				cur_data->col[*cur] = col;
-				*cur += 1;
-
-				cur = NULL;
-				cur_data = NULL;
-			} 
-
-			pos[0] = 0;
-			pos[1] = 0;
-			pos[2] = 0;
-
-			col.r = 0;
-			col.g = 0;
-			col.b = 0;
-
-			rot[0] = 0;
-			rot[1] = 0;
-			rot[2] = 0;
-			rot[3] = 1;
+      p = push(&s.primitives);
+      glm_vec3_copy(default_pos, p->position);
+      glm_vec4_copy(default_rotation, p->rotation);
 		} else if (strncmp(PLANE, line, strlen(PLANE)) == 0) {
-			cur = &cur_plane;
-			cur_data = &s.plns.comm_data;
-			process_vec3(line, &s.plns.nrms[cur_plane]);
+      RAY_VERIFY(p != NULL, "primitive is  NULL!!!");
+      process_vec3(line, &p->normal); 
+      p->type = PRIMITIVE_PLANE;
 		} else if (strncmp(ELLIPSOID, line, strlen(ELLIPSOID)) == 0) {
-			cur = &cur_ellipsoid;
-			cur_data = &s.elps.comm_data;
-			process_vec3(line, &s.elps.rads[cur_ellipsoid]);
+      RAY_VERIFY(p != NULL, "primitive is  NULL!!!");
+      process_vec3(line, &p->radius); 
+      p->type = PRIMITIVE_ELLIPSOID;
 		} else if (strncmp(BOX, line, strlen(BOX)) == 0) {
-			cur = &cur_box;
-			cur_data = &s.bxs.comm_data;
-			process_vec3(line, &s.bxs.szs[cur_box]);
+      RAY_VERIFY(p != NULL, "primitive is  NULL!!!");
+      process_vec3(line, &p->sizes); 
+      p->type = PRIMITIVE_BOX;
 		} else if (strncmp(POSITION, line, strlen(POSITION)) == 0) {
-			process_vec3(line, &pos);
+      process_vec3(line, &p->position); 
 		} else if (strncmp(ROTATION, line, strlen(ROTATION)) == 0) {
-			process_vec4(line, &rot);
+      process_vec4(line, &p->rotation); 
 		} else if (strncmp(COLOUR, line, strlen(COLOUR)) == 0) {
-			process_colour(line, &col);
+      process_colour(line, &p->colour); 
 		} else if (strcmp(line, "\n") != 0) {
 			RAY_WARNING("Unknown command '%s'", line);
 		}
 	}
 	
-	RAY_VERIFY(cur != NULL, "Corrupted scene file! No primitives provided!");
-
-	memcpy(&cur_data->pos[*cur], &pos, sizeof(pos));
-	memcpy(&cur_data->rot[*cur], &rot, sizeof(rot));
-	cur_data->col[*cur] = col;
-	*cur += 1;
-
-	RAY_VERIFY(cur_box == s.bxs.n, "Parsed %ld boxes, but %ld expected!", cur_box, s.bxs.n);
-	RAY_VERIFY(cur_ellipsoid == s.elps.n, "Parsed %ld ellipsoids, but %ld expected!", cur_ellipsoid, s.elps.n);
-	RAY_VERIFY(cur_plane == s.plns.n, "Parsed %ld planes, but %ld expected!", cur_plane, s.plns.n);
-
 	fclose(f);
+
+  s.lp.n = 0;
+  s.ld.n = 0;
+  s.ambient.r = 255;
+  s.ambient.g = 255;
+  s.ambient.b = 255;
 
 	return s;
 }

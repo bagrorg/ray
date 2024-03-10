@@ -1,41 +1,52 @@
 #ifndef SCENE_H
 #define SCENE_H
 
+#include "vector.h"
+
 #include <stdint.h>
 #include <stddef.h>
 
 #include "cglm/cglm.h"
 
 typedef struct {
-	uint8_t r;
-	uint8_t g;
-	uint8_t b;
+  uint8_t r, g, b;
 } RGB;
 
 ///////////// GEOMETRY OBJECTS ///////////////
-typedef struct {
-	vec3 *pos;	
-	vec4 *rot;	
-	RGB *col;			
-} comm_data;
+
+typedef enum {
+  PRIMITIVE_BOX,
+  PRIMITIVE_PLANE,
+  PRIMITIVE_ELLIPSOID
+} primitive_type;
 
 typedef struct {
-	size_t n;
-	vec3 *nrms;
-	comm_data comm_data;
-} planes;
+  primitive_type type;
+
+	vec3 position;	
+	vec4 rotation;	
+	RGB colour;			
+  
+  union {
+    vec3 normal;
+    vec3 radius;
+    vec3 sizes;
+  };
+
+} primitive;
 
 typedef struct {
-	size_t n;
-	vec3 *rads;
-	comm_data comm_data;
-} ellipsoids;
+  size_t n;
+  vec3 *dirs;
+  vec3 *ints;
+} lights_dir;
 
 typedef struct {
-	size_t n;
-	vec3 *szs;
-	comm_data comm_data;
-} boxes;
+  size_t n;
+  vec3 *pos;
+  vec3 *ints;
+  vec3 *attens;
+} lights_point;
 ///////////// //////////////// ///////////////
 
 /////////////	    CAMERA	   ///////////////
@@ -55,15 +66,15 @@ typedef struct {
 
 typedef struct {
 	RGB bg;
+  RGB ambient;
 	camera cam;
+  
+  vector primitives;
 
-	planes plns;
-	ellipsoids elps;
-	boxes bxs;
+  lights_point lp;
+  lights_dir ld;
 } scene;
 
-scene new_scene(size_t boxes, size_t ellipses, size_t planes);
-void free_scene(scene *s);
 
 void print_scene(const scene *s);
 

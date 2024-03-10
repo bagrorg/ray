@@ -18,4 +18,5 @@ int main(int argc, char **argv) {
 
   write_ppm(argv[2], s.cam.w, s.cam.h, rgb);
   free(rgb);
+  free(s.primitives.data);
 }

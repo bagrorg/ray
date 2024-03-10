@@ -22,10 +22,6 @@ typedef struct {
   bool succ;
 } intsec;
 
-intsec intersect_box(const ray *r, const vec3 *szs, const vec3 *pos, const vec4 *rot, const RGB *col);
-intsec intersect_plane(const ray *r, const vec3 *nrm, const vec3 *pos, const vec4 *rot, const RGB *col);
-intsec intersect_ellipsoid(const ray *r, const vec3 *rads, const vec3 *pos, const vec4 *rot, const RGB *col);
-
 RGB *render(const scene *s);
 
 #endif

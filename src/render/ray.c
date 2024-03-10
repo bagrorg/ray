@@ -4,6 +4,8 @@
 
 #include "cglm/vec3.h"
 #include "cglm/quat.h"
+#include "common/assert.h"
+#include "common/scene.h"
 
 #include <math.h>
 
@@ -35,16 +37,16 @@ void compute_int_point(const ray *r, float t, vec3 *P) {
     glm_vec3_add(*P, step, *P);
 }
 
-intsec intersect_box(const ray *r, const vec3 *szs, const vec3 *pos, const vec4 *rot, const RGB *col) {
+intsec intersect_box(const ray *r, const primitive *p) {
   intsec i = {
     .succ = false
   };
   ray adj_r;
-  prepare_ray(r, pos, rot, &adj_r);
+  prepare_ray(r, &p->position, &p->rotation, &adj_r);
 
   vec3 ts1, ts2;
-  glm_vec3_copy(*szs, ts1);
-  glm_vec3_copy(*szs, ts2);
+  glm_vec3_copy(p->sizes, ts1);
+  glm_vec3_copy(p->sizes, ts2);
   glm_vec3_scale(ts1, -1, ts1);
 
   glm_vec3_sub(ts1, adj_r.o, ts1);
@@ -71,19 +73,19 @@ intsec intersect_box(const ray *r, const vec3 *szs, const vec3 *pos, const vec4 
 	if (t1 >= 0) {
 		// t1 -- nearest solution
     i.t = t1;
-    i.col = *col;
+    i.col = p->colour;
     i.succ = true;
 	} else if (t2 >= 0) {
 		// t1 -- nearest solution
     i.t = t2;
-    i.col = *col;
+    i.col = p->colour;
     i.succ = true;
 	}
 
   if (i.succ) {
     vec3 P;
     compute_int_point(&adj_r, i.t, &P);
-    glm_vec3_div(P, *szs, P);
+    glm_vec3_div(P, p->sizes, P);
     for (size_t i = 0; i < 3; i++) {
       if (fabs(P[i] - 1.0) > 0.00001) {
         P[i] = 0.0;
@@ -92,43 +94,43 @@ intsec intersect_box(const ray *r, const vec3 *szs, const vec3 *pos, const vec4 
     glm_vec3_copy(P, i.N);
     glm_vec3_normalize(i.N);
     
-    postprocess_normal(&i.N, rot);
+    postprocess_normal(&i.N, &p->rotation);
   }
 
   return i;
 }
 
-intsec intersect_plane(const ray *r, const vec3 *nrm, const vec3 *pos, const vec4 *rot, const RGB *col) {
+intsec intersect_plane(const ray *r, const primitive *p) {
   intsec i = {
     .succ = false,
   };
   ray adj_r;
-  prepare_ray(r, pos, rot, &adj_r);
+  prepare_ray(r, &p->position, &p->rotation, &adj_r);
 
-	float t = -glm_vec3_dot(adj_r.o, *nrm) / glm_vec3_dot(adj_r.d, *nrm);
+	float t = -glm_vec3_dot(adj_r.o, p->normal) / glm_vec3_dot(adj_r.d, p->normal);
 	
 	if (t >= 0) {
     i.succ = true;
     i.t = t;
-    i.col = *col;
-    glm_vec3_copy(*nrm, i.N);
+    i.col = p->colour;
+    glm_vec3_copy(p->normal, i.N);
     glm_vec3_normalize(i.N);
-    postprocess_normal(&i.N, rot);
+    postprocess_normal(&i.N, &p->rotation);
 	}
 
   return i;
 }
 
-intsec intersect_ellipsoid(const ray *r, const vec3 *rads, const vec3 *pos, const vec4 *rot, const RGB *col) {
+intsec intersect_ellipsoid(const ray *r, const primitive *p) {
   intsec i = {
     .succ = false,
   };
   ray adj_r;
-  prepare_ray(r, pos, rot, &adj_r);
+  prepare_ray(r, &p->position, &p->rotation, &adj_r);
 
 	vec3 dr, or;
-	glm_vec3_div(adj_r.o, *rads, or);
-	glm_vec3_div(adj_r.d, *rads, dr);
+	glm_vec3_div(adj_r.o, p->radius, or);
+	glm_vec3_div(adj_r.d, p->radius, dr);
 
 	float a, b, c;
 	a = glm_vec3_dot(dr, dr);
@@ -151,12 +153,12 @@ intsec intersect_ellipsoid(const ray *r, const vec3 *rads, const vec3 *pos, cons
 		// t1 -- nearest solution
     i.t = t1;
     i.succ = true;
-    i.col = *col;
+    i.col = p->colour;
 	} else if (t1 < 0 && t2 > 0) {
 		// inside sphere, t2 -- front solution
     i.t = t2;
     i.succ = true;
-    i.col = *col;
+    i.col = p->colour;
 	} else if (t2 < 0) {
 		// Sphere is behind, TODO delete this branch?
     return i;
@@ -165,88 +167,100 @@ intsec intersect_ellipsoid(const ray *r, const vec3 *rads, const vec3 *pos, cons
   if (i.succ) {
     vec3 P, R2;
     compute_int_point(&adj_r, i.t, &P);
-    glm_vec3_mul(*rads, *rads, R2); 
+    glm_vec3_mul(p->radius, p->radius, R2); 
     glm_vec3_div(P, R2, i.N);
     glm_vec3_normalize(i.N);
-    postprocess_normal(&i.N, rot);
+    postprocess_normal(&i.N, &p->rotation);
   }
 
   return i;
 }
 
+void attenuation(vec3 I, vec3 C, float R) {
+  RAY_VERIFY(C[0] > 0, "C[0] == 0");
+
+  float w = C[0] + C[1] * R + C[2] * R * R;
+  glm_vec3_divs(I, w, I);
+}
+
+RGB process_light(const scene *s, const ray *r, const intsec *i) {
+  RGB col;
+  vec3 sum = {(float) s->ambient.r / 255, 
+              (float) s->ambient.g / 255, 
+              (float) s->ambient.b / 255};
+
+  for (size_t l = 0; l < s->ld.n; l++) {
+    float light_dot = glm_vec3_dot(i->N, s->ld.dirs[l]);
+    if (light_dot < 0) {
+      continue;
+    }
+    
+    vec3 w;
+    glm_vec3_scale(s->ld.ints[l], light_dot, w);
+    glm_vec3_add(sum, w, sum);
+  }
+
+  for (size_t l = 0; l < s->lp.n; l++) {
+    vec3 P;
+    glm_vec3_scale(r->d, i->t, P);
+    glm_vec3_add(r->o, P, P);
+
+    vec3 light_dir;
+    float R;
+    glm_vec3_sub(s->lp.pos[l], P, light_dir);
+    R = glm_vec3_norm(light_dir);
+
+    float light_dot = glm_vec3_dot(i->N, s->lp.pos[l]);
+    if (light_dot < 0) {
+      continue;
+    }
+    
+    vec3 w;
+    glm_vec3_scale(s->ld.ints[l], light_dot, w);
+    attenuation(w, s->lp.attens[l], R);
+
+    glm_vec3_add(sum, w, sum);
+  }
+
+  col.r = i->col.r * sum[0];
+  col.g = i->col.g * sum[1];
+  col.b = i->col.b * sum[2];
+
+  return col;
+}
+
 RGB process_ray(const scene *s, const ray *r) {
-	size_t b_cnt = s->bxs.n;
-	size_t p_cnt = s->plns.n;
-	size_t e_cnt = s->elps.n;
+  intsec res_glob = {
+    .succ = false,
+  };
 
-	bool intersected = false;
-	float t;
-	RGB col = s->bg;
+	for (size_t i = 0; i < s->primitives.size; i++) {
+    primitive *p = &((primitive*) s->primitives.data)[i];
+    intsec res;
 
-	for (size_t i = 0; i < b_cnt; i++) {
-		intsec res = intersect_box(
-				r, 
-				&s->bxs.szs[i], 
-				&s->bxs.comm_data.pos[i],
-				&s->bxs.comm_data.rot[i], 
-				&s->bxs.comm_data.col[i]);
-		
+    switch (p->type) {
+      case PRIMITIVE_BOX:
+        res = intersect_box(r, p);  
+        break;
+      case PRIMITIVE_PLANE:
+        res = intersect_plane(r, p);
+        break;
+      case PRIMITIVE_ELLIPSOID:
+        res = intersect_ellipsoid(r, p);
+        break;
+    };
+
 		if (res.succ) {
-			if ((intersected && res.t < t) || !intersected) {
-				t = res.t;
-				//col = res.col;
-		    col.r = 255.0 * res.N[0];	
-		    col.g = 255.0 * res.N[1];	
-		    col.b = 255.0 * res.N[2];	
+			if ((res_glob.succ && res.t < res_glob.t) || !res_glob.succ) {
+        res_glob = res;
 			}
-
-			intersected = true;
 		}
 	}
 
-	for (size_t i = 0; i < p_cnt; i++) {
-	    intsec res = intersect_plane(
-				r, 
-				&s->plns.nrms[i], 
-				&s->plns.comm_data.pos[i],
-				&s->plns.comm_data.rot[i], 
-				&s->plns.comm_data.col[i]);
-		
-		if (res.succ) {
-			if ((intersected && res.t < t) || !intersected) {
-				t = res.t;
-				//col = res.col;
-		    col.r = 255.0 * res.N[0];	
-		    col.g = 255.0 * res.N[1];	
-		    col.b = 255.0 * res.N[2];	
-      }
+  
+  if (!res_glob.succ) return s->bg;
 
-			intersected = true;
-		}
-	}
-
-	for (size_t i = 0; i < e_cnt; i++) {
-		intsec res = intersect_ellipsoid(
-				r, 
-				&s->elps.rads[i], 
-				&s->elps.comm_data.pos[i],
-				&s->elps.comm_data.rot[i], 
-				&s->elps.comm_data.col[i]);
-		
-		if (res.succ) {
-			if ((intersected && res.t < t) || !intersected) {
-				t = res.t;
-				//col = res.col;
-		    col.r = 255.0 * res.N[0];	
-		    col.g = 255.0 * res.N[1];	
-		    col.b = 255.0 * res.N[2];	
-			}
-
-			intersected = true;
-		}
-	}
-
-	return col;
+	return process_light(s, r, &res_glob);
 }
 
 RGB *render(const scene *s) {
