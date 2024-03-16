@@ -22,6 +22,7 @@ typedef struct {
   bool succ;
 } intsec;
 
+void process_ray(intsec *res_glob, const scene *s, const ray *r, float max_depth);
 RGB *render(const scene *s);
 
 #endif

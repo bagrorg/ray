@@ -143,21 +143,23 @@ intsec intersect_ellipsoid(const ray *r, const primitive *p) {
 	}
 	float Dsqrt = sqrtf(D);
 
-	float t1 = (-Dsqrt + b) / (2 * a);
+	float t1 = (Dsqrt - b) / (2 * a);
 	float t2 = (-Dsqrt - b) / (2 * a);
 	if (t2 < t1) {
 		swap(&t1, &t2);
 	}
-
+  
 	if (t1 > 0) {
 		// t1 -- nearest solution
     i.t = t1;
     i.succ = true;
+    i.l = OUTER;
     glm_vec3_copy(p->colour, i.col);
 	} else if (t1 < 0 && t2 > 0) {
 		// inside sphere, t2 -- front solution
     i.t = t2;
     i.succ = true;
+    i.l = INNER;
     glm_vec3_copy(p->colour, i.col);
 	} else if (t2 < 0) {
 		// Sphere is behind, TODO delete this branch?
@@ -191,6 +193,27 @@ void process_light(const scene *s, const ray *r, const intsec *i, RGB *dest) {
   for (size_t l = 0; l < s->lights_directed.size; l++) {
     light_directed *ld = &((light_directed*)s->lights_directed.data)[l];
 
+    vec3 P;
+    glm_vec3_scale(r->d, i->t, P);
+    glm_vec3_add(r->o, P, P);
+    
+    ray light_ray;
+    glm_vec3_copy(P, light_ray.o);
+    glm_vec3_copy(ld->direction, light_ray.d);
+
+    // shift to prevent shadow acne
+    vec3 shift;
+    glm_vec3_copy(i->N, shift);
+    glm_vec3_scale(shift, 1e-5, shift);
+    glm_vec3_add(shift, light_ray.o, light_ray.o);
+    
+    intsec i_temp;
+    process_ray(&i_temp, s, &light_ray, INFINITY);    
+
+    if (i_temp.succ) {
+      continue;
+    }
+    
     float light_dot = glm_vec3_dot(i->N, ld->direction);
     if (light_dot < 0) {
       continue;
@@ -214,6 +237,22 @@ void process_light(const scene *s, const ray *r, const intsec *i, RGB *dest) {
     R = glm_vec3_norm(light_dir);
     glm_vec3_normalize(light_dir);
 
+    ray light_ray;
+    glm_vec3_copy(P, light_ray.o);
+    glm_vec3_copy(light_dir, light_ray.d);
+
+    // shift to prevent shadow acne
+    vec3 shift;
+    glm_vec3_copy(i->N, shift);
+    glm_vec3_scale(shift, 1e-5, shift);
+    glm_vec3_add(shift, light_ray.o, light_ray.o);
+
+    intsec i_temp;
+    process_ray(&i_temp, s, &light_ray, R);
+    if (i_temp.succ) {
+      continue;
+    }
+
     float light_dot = glm_vec3_dot(i->N, light_dir);
     if (light_dot < 0) {
       continue;
@@ -229,10 +268,8 @@ void process_light(const scene *s, const ray *r, const intsec *i, RGB *dest) {
   glm_vec3_mul(i->col, sum, *dest);
 }
 
-void process_ray(const scene *s, const ray *r, RGB *dest) {
-  intsec res_glob = {
-    .succ = false,
-  };
+void process_ray(intsec *res_glob, const scene *s, const ray *r, float max_depth) {
+  res_glob->succ = false;
 
 	for (size_t i = 0; i < s->primitives.size; i++) {
     primitive *p = &((primitive*) s->primitives.data)[i];
@@ -250,16 +287,16 @@ void process_ray(const scene *s, const ray *r, RGB *dest) {
         break;
     };
 
-		if (res.succ) {
-			if ((res_glob.succ && res.t < res_glob.t) || !res_glob.succ) {
-        res_glob = res;
+		if (res.succ && res.t <= max_depth) {
+			if ((res_glob->succ && res.t < res_glob->t) || !res_glob->succ) {
+        *res_glob = res;
 			}
 		}
-	}
+	}  
+}
 
-  
-  if (!res_glob.succ) glm_vec3_copy(s->bg, *dest);
-	process_light(s, r, &res_glob, dest);
+void process_ray_regular(intsec *res_glob, const scene *s, const ray *r) {
+  process_ray(res_glob, s, r, INFINITY);
 }
 
 RGB *render(const scene *s) {
@@ -287,7 +324,16 @@ RGB *render(const scene *s) {
 
       glm_vec3_normalize(r.d);
 
-			process_ray(s, &r, &render[x + y * s->cam.w]);
+      intsec res;
+			process_ray_regular(&res, s, &r);
+
+      if (res.succ) {
+        RGB col;
+        process_light(s, &r, &res, &col);
+        glm_vec3_copy(col, render[x + y * s->cam.w]);
+      } else {
+        glm_vec3_copy(s->bg, render[x + y * s->cam.w]);
+      }
 		}
 	}
 
