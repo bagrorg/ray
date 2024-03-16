@@ -6,6 +6,7 @@
 #include <stdbool.h>
 
 #include "common/assert.h"
+#include "common/scene.h"
 
 static const char *DIMENSIONS = "DIMENSIONS";
 static const char *BG_COLOUR = "BG_COLOR";
@@ -62,17 +63,17 @@ void process_colour(char *line, RGB *dst) {
 	token = strtok(NULL, " ");
 	RAY_VERIFY(token != NULL, "Colour line has less than 3 arguments!");
 	val = atof(token);
-	dst->r = round(val * 255);
+	(*dst)[0] = val;
 
 	token = strtok(NULL, " ");
 	RAY_VERIFY(token != NULL, "Colour line has less than 3 arguments!");
 	val = atof(token);
-	dst->g = round(val * 255);
+	(*dst)[1] = val;
 
 	token = strtok(NULL, " ");
 	RAY_VERIFY(token != NULL, "Colour line has less than 3 arguments!");
 	val = atof(token);
-	dst->b = round(val * 255);
+	(*dst)[2] = val;
 }
 
 void process_vec3(char *line, vec3 *dst) {
@@ -115,6 +116,11 @@ void process_vec4(char *line, vec4 *dst) {
 	(*dst)[3] = atof(token);
 }
 
+typedef struct {
+  vec3 property;
+  vec3 intensity;
+} common_light_data;
+
 scene parse(const char *path) {
 	ssize_t res;
 	size_t len;
@@ -125,9 +131,17 @@ scene parse(const char *path) {
 
 	scene s;	
   primitive *p;
-  init(&s.primitives, sizeof *p);
+  light_point *lp;
+  light_directed *ld;
 
-  vec3 default_pos = {0, 0, 1};
+  common_light_data stack_tmp;
+  common_light_data *current_light_common_data;
+
+  init(&s.primitives, sizeof *p);
+  init(&s.lights_point, sizeof *lp);
+  init(&s.lights_directed, sizeof *ld);
+
+  vec3 default_pos = {0, 0, 0};
   vec4 default_rotation = {0, 0, 0, 1};
 
 	while ((res = getline(&line, &len, f)) != -1) {
@@ -167,18 +181,44 @@ scene parse(const char *path) {
       process_vec4(line, &p->rotation); 
 		} else if (strncmp(COLOUR, line, strlen(COLOUR)) == 0) {
       process_colour(line, &p->colour); 
+		} else if (strncmp(NEW_LIGHT, line, strlen(NEW_LIGHT)) == 0) {
+      lp = NULL;
+      ld = NULL;
+      stack_tmp.property[0] = 0;
+      stack_tmp.property[1] = 0;
+      stack_tmp.property[2] = 0;
+      stack_tmp.intensity[0] = 0;
+      stack_tmp.intensity[1] = 0;
+      stack_tmp.intensity[2] = 0;
+      
+      current_light_common_data = &stack_tmp;
+		} else if (strncmp(LIGHT_INTENSITY, line, strlen(LIGHT_INTENSITY)) == 0) {
+      RAY_VERIFY(current_light_common_data != NULL, "primitive is  NULL!!!");
+      process_vec3(line, &current_light_common_data->intensity);
+		} else if (strncmp(LIGHT_POSITION, line, strlen(LIGHT_POSITION)) == 0) {
+      if (lp == NULL) {
+        lp = push(&s.lights_point);
+      }
+      current_light_common_data = (common_light_data*)lp; 
+      process_vec3(line, &lp->position);
+		} else if (strncmp(LIGHT_DIRECTION, line, strlen(LIGHT_DIRECTION)) == 0) {
+      ld = push(&s.lights_directed);
+      current_light_common_data = (common_light_data*)ld; 
+      process_vec3(line, &ld->direction);
+		} else if (strncmp(LIGHT_ATTENUATION, line, strlen(LIGHT_ATTENUATION)) == 0) {
+      if (lp == NULL) {
+        lp = push(&s.lights_point);
+      }
+      current_light_common_data = (common_light_data*)lp; 
+      process_vec3(line, &lp->attenuation);
+		} else if (strncmp(AMBIENT_LIGHT, line, strlen(AMBIENT_LIGHT)) == 0) {
+      process_colour(line, &s.ambient);
 		} else if (strcmp(line, "\n") != 0) {
-			RAY_WARNING("Unknown command '%s'", line);
-		}
+			RAY_WARNING("Unknown command '%s'", line);  
+    }
 	}
 	
 	fclose(f);
-
-  s.lp.n = 0;
-  s.ld.n = 0;
-  s.ambient.r = 255;
-  s.ambient.g = 255;
-  s.ambient.b = 255;
 
 	return s;
 }

@@ -73,12 +73,12 @@ intsec intersect_box(const ray *r, const primitive *p) {
 	if (t1 >= 0) {
 		// t1 -- nearest solution
     i.t = t1;
-    i.col = p->colour;
+    glm_vec3_copy(p->colour, i.col);
     i.succ = true;
 	} else if (t2 >= 0) {
 		// t1 -- nearest solution
     i.t = t2;
-    i.col = p->colour;
+    glm_vec3_copy(p->colour, i.col);
     i.succ = true;
 	}
 
@@ -112,7 +112,7 @@ intsec intersect_plane(const ray *r, const primitive *p) {
 	if (t >= 0) {
     i.succ = true;
     i.t = t;
-    i.col = p->colour;
+    glm_vec3_copy(p->colour, i.col);
     glm_vec3_copy(p->normal, i.N);
     glm_vec3_normalize(i.N);
     postprocess_normal(&i.N, &p->rotation);
@@ -153,12 +153,12 @@ intsec intersect_ellipsoid(const ray *r, const primitive *p) {
 		// t1 -- nearest solution
     i.t = t1;
     i.succ = true;
-    i.col = p->colour;
+    glm_vec3_copy(p->colour, i.col);
 	} else if (t1 < 0 && t2 > 0) {
 		// inside sphere, t2 -- front solution
     i.t = t2;
     i.succ = true;
-    i.col = p->colour;
+    glm_vec3_copy(p->colour, i.col);
 	} else if (t2 < 0) {
 		// Sphere is behind, TODO delete this branch?
     return i;
@@ -183,53 +183,53 @@ void attenuation(vec3 I, vec3 C, float R) {
   glm_vec3_divs(I, w, I);
 }
 
-RGB process_light(const scene *s, const ray *r, const intsec *i) {
+void process_light(const scene *s, const ray *r, const intsec *i, RGB *dest) {
   RGB col;
-  vec3 sum = {(float) s->ambient.r / 255, 
-              (float) s->ambient.g / 255, 
-              (float) s->ambient.b / 255};
+  vec3 sum = {(float) s->ambient[0] / 255, 
+              (float) s->ambient[1] / 255, 
+              (float) s->ambient[2] / 255};
+  for (size_t l = 0; l < s->lights_directed.size; l++) {
+    light_directed *ld = &((light_directed*)s->lights_directed.data)[l];
 
-  for (size_t l = 0; l < s->ld.n; l++) {
-    float light_dot = glm_vec3_dot(i->N, s->ld.dirs[l]);
+    float light_dot = glm_vec3_dot(i->N, ld->direction);
     if (light_dot < 0) {
       continue;
     }
     
     vec3 w;
-    glm_vec3_scale(s->ld.ints[l], light_dot, w);
+    glm_vec3_scale(ld->intensity, light_dot, w);
     glm_vec3_add(sum, w, sum);
   }
 
-  for (size_t l = 0; l < s->lp.n; l++) {
+  for (size_t l = 0; l < s->lights_point.size; l++) {
+    light_point *lp = &((light_point*)s->lights_point.data)[l];
+
     vec3 P;
     glm_vec3_scale(r->d, i->t, P);
     glm_vec3_add(r->o, P, P);
 
     vec3 light_dir;
     float R;
-    glm_vec3_sub(s->lp.pos[l], P, light_dir);
+    glm_vec3_sub(lp->position, P, light_dir);
     R = glm_vec3_norm(light_dir);
+    glm_vec3_normalize(light_dir);
 
-    float light_dot = glm_vec3_dot(i->N, s->lp.pos[l]);
+    float light_dot = glm_vec3_dot(i->N, light_dir);
     if (light_dot < 0) {
       continue;
     }
     
     vec3 w;
-    glm_vec3_scale(s->ld.ints[l], light_dot, w);
-    attenuation(w, s->lp.attens[l], R);
+    glm_vec3_scale(lp->intensity, light_dot, w);
+    attenuation(w, lp->attenuation, R);
 
     glm_vec3_add(sum, w, sum);
   }
 
-  col.r = i->col.r * sum[0];
-  col.g = i->col.g * sum[1];
-  col.b = i->col.b * sum[2];
-
-  return col;
+  glm_vec3_mul(i->col, sum, *dest);
 }
 
-RGB process_ray(const scene *s, const ray *r) {
+void process_ray(const scene *s, const ray *r, RGB *dest) {
   intsec res_glob = {
     .succ = false,
   };
@@ -258,9 +258,8 @@ RGB process_ray(const scene *s, const ray *r) {
 	}
 
   
-  if (!res_glob.succ) return s->bg;
-
-	return process_light(s, r, &res_glob);
+  if (!res_glob.succ) glm_vec3_copy(s->bg, *dest);
+	process_light(s, r, &res_glob, dest);
 }
 
 RGB *render(const scene *s) {
@@ -288,7 +287,7 @@ RGB *render(const scene *s) {
 
       glm_vec3_normalize(r.d);
 
-			render[x + y * s->cam.w] = process_ray(s, &r);
+			process_ray(s, &r, &render[x + y * s->cam.w]);
 		}
 	}
 

@@ -8,9 +8,7 @@
 
 #include "cglm/cglm.h"
 
-typedef struct {
-  uint8_t r, g, b;
-} RGB;
+typedef vec3 RGB;
 
 ///////////// GEOMETRY OBJECTS ///////////////
 
@@ -36,17 +34,15 @@ typedef struct {
 } primitive;
 
 typedef struct {
-  size_t n;
-  vec3 *dirs;
-  vec3 *ints;
-} lights_dir;
+  vec3 direction;
+  vec3 intensity;
+} light_directed;
 
 typedef struct {
-  size_t n;
-  vec3 *pos;
-  vec3 *ints;
-  vec3 *attens;
-} lights_point;
+  vec3 position;
+  vec3 intensity;
+  vec3 attenuation;
+} light_point;
 ///////////// //////////////// ///////////////
 
 /////////////	    CAMERA	   ///////////////
@@ -70,9 +66,9 @@ typedef struct {
 	camera cam;
   
   vector primitives;
+  vector lights_directed;
+  vector lights_point;
 
-  lights_point lp;
-  lights_dir ld;
 } scene;
 
 

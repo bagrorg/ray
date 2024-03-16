@@ -4,7 +4,7 @@
 #include <malloc.h>
 
 void print_RGB(RGB rgb) {
-	printf("(%u, %u, %u)", rgb.r, rgb.g, rgb.b);
+	printf("(%f, %f, %f)", rgb[0], rgb[1], rgb[2]);
 }
 
 void print_vec3(const vec3 v) {
@@ -81,6 +81,37 @@ void print_cam(const camera *c) {
 	printf("\n");
 }
 
+void print_light_directed(const light_directed *ld) {
+  printf("\tDIRECTED LIGHT:\n");
+
+  printf("\t\tdirection = ");
+  print_vec3(ld->direction);
+  printf("\n");
+
+  printf("\t\tintensity = ");
+  print_vec3(ld->intensity);
+  printf("\n");
+  printf("\n");
+}
+
+void print_light_point(const light_point *lp) {
+  printf("\tPOINT LIGHT:\n");
+
+  printf("\t\tposition = ");
+  print_vec3(lp->position);
+  printf("\n");
+
+  printf("\t\tintensity = ");
+  print_vec3(lp->intensity);
+  printf("\n");
+
+  printf("\t\tattenuation = ");
+  print_vec3(lp->attenuation);
+  printf("\n");
+
+  printf("\n");
+}
+
 void print_scene(const scene *s) {
 	printf("SCENE:\n\tbackground = ");
 	print_RGB(s->bg);	
@@ -103,6 +134,14 @@ void print_scene(const scene *s) {
         print_ellipsoids(p);
         break;
     }
+  }
+
+  for (size_t i = 0; i < s->lights_point.size; i++) {
+    print_light_point(&((light_point*)s->lights_point.data)[i]);
+  }
+
+  for (size_t i = 0; i < s->lights_directed.size; i++) {
+    print_light_directed(&((light_directed*)s->lights_directed.data)[i]);
   }
 }
 
