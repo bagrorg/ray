@@ -84,13 +84,23 @@ intsec intersect_box(const ray *r, const primitive *p) {
     vec3 P;
     compute_int_point(&adj_r, i.t, &P);
     glm_vec3_div(P, p->sizes, P);
-    for (size_t i = 0; i < 3; i++) {
-      if (fabs(fabs(P[i]) - 1.0) > 0.00001) {
-        P[i] = 0.0;
+    glm_vec3_div(adj_r.o, p->sizes, adj_r.o);
+    i.l = INNER;
+
+    for (size_t c = 0; c < 3; c++) {
+      if (fabs(fabs(P[c]) - 1.0) > 0.00001) {
+        P[c] = 0.0;
+      }
+
+      if (fabs(adj_r.o[c]) > 1.f) {
+        i.l = OUTER;
       }
     }
     glm_vec3_copy(P, i.N);
     glm_vec3_normalize(i.N);
+    if (i.l == INNER) {
+      glm_vec3_negate(i.N);
+    }
     
     postprocess_normal(&i.N, &p->rotation);
   }
@@ -218,9 +228,9 @@ intsec intersect_ray(const scene *s, const ray *r, float max_depth) {
 
 void process_light(const scene *s, const ray *r, const intsec *i, RGB *dest) {
   RGB col;
-  vec3 sum = {(float) s->ambient[0] / 255, 
-              (float) s->ambient[1] / 255, 
-              (float) s->ambient[2] / 255};
+  vec3 sum = {(float) s->ambient[0], 
+              (float) s->ambient[1], 
+              (float) s->ambient[2]};
 
   // Direction lights processing
   for (size_t l = 0; l < s->lights_directed.size; l++) {
@@ -374,6 +384,8 @@ void process_dielectric(RGB *dest, const scene *s, const ray *r, const intsec *i
 
   float cos_th1 = -1 * glm_vec3_dot(i->N, r->d);
   float sin_th2 = mu1 / mu2 * sqrtf(1 - cos_th1 * cos_th1);
+
+  RAY_VERIFY(cos_th1 > 0, "cos = %f < 0; %f %f %f; %d", cos_th1, i->N[0], i->N[1], i->N[2], i->l);
   
   RGB reflected_colour;
   process_reflection(&reflected_colour, s, r, i, max_depth, recursion_depth - 1);
@@ -420,8 +432,7 @@ void process_ray(RGB *dest, const scene *s, const ray *r, float max_depth, size_
 
   if (res.p == NULL) {
     glm_vec3_copy(s->bg, *dest);
-  } else {
-    
+  } else { 
     switch (res.p->material) {
     case MATERIAL_DIFFUSE:
       process_diffuse(dest, s, r, &res);
@@ -465,7 +476,7 @@ RGB *render(const scene *s) {
 
       glm_vec3_normalize(r.d);
 
-			process_ray_regular(&render[x + y * s->cam.w], s, &r, s->rec_depth);//TODO
+			process_ray_regular(&render[x + y * s->cam.w], s, &r, s->rec_depth);
 		}
 	}
 
