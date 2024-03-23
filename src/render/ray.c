@@ -169,6 +169,10 @@ intsec intersect_ellipsoid(const ray *r, const primitive *p) {
     glm_vec3_div(P, R2, i.N);
     glm_vec3_normalize(i.N);
     postprocess_normal(&i.N, &p->rotation);
+
+    if (i.l == INNER) {
+      glm_vec3_negate(i.N);
+    }
   }
 
   return i;
@@ -320,8 +324,75 @@ void process_reflection(RGB *dest, const scene *s, const ray *r, const intsec *i
   process_ray(dest, s, &reflected_ray, max_depth, recursion_depth); 
 }
 
-void process_dielectric() {
+void process_refraction(
+  RGB *dest, 
+  const scene *s, 
+  const ray *r, 
+  const intsec *i, 
+  float max_depth, 
+  size_t recursion_depth, 
+  float cos_th1, 
+  float sin_th2, 
+  float mu1, 
+  float mu2) {
 
+  float cos_th2 = sqrtf(1 - sin_th2 * sin_th2);
+
+  // TODO reduce amount of origin computations
+  ray refracted_ray;
+ 
+  // REFL.O = R->O + R->D * i->t + eps * i->N
+  glm_vec3_copy(r->d, refracted_ray.o);
+  glm_vec3_scale(refracted_ray.o, i->t, refracted_ray.o);
+  glm_vec3_add(r->o, refracted_ray.o, refracted_ray.o);
+
+  vec3 shift;
+  glm_vec3_copy(i->N, shift);
+  glm_vec3_scale(shift, -1e-4, shift);
+  glm_vec3_add(shift, refracted_ray.o, refracted_ray.o);
+
+  // REFL.D = left + right = mu1/mu2 * (R->D) + (mu1/mu2 cos_th1 - cos_th2) * i->N
+  vec3 left, right;
+  float mu1_mu2 = mu1 / mu2;
+  glm_vec3_scale(r->d, mu1_mu2, left);
+  glm_vec3_scale(i->N, mu1_mu2 * cos_th1 - cos_th2, right);
+  glm_vec3_add(left, right, refracted_ray.d);
+  glm_vec3_normalize(refracted_ray.d);
+  
+  process_ray(dest, s, &refracted_ray, max_depth, recursion_depth); 
+}
+
+void process_dielectric(RGB *dest, const scene *s, const ray *r, const intsec *i, float max_depth, size_t recursion_depth) {
+  float mu1 = 1.f;
+  float mu2 = i->p->ior;
+
+  if (i->l == INNER) {
+    swap(&mu1, &mu2);
+  }
+
+  float cos_th1 = -1 * glm_vec3_dot(i->N, r->d);
+  float sin_th2 = mu1 / mu2 * sqrtf(1 - cos_th1 * cos_th1);
+  
+  RGB reflected_colour;
+  process_reflection(&reflected_colour, s, r, i, max_depth, recursion_depth - 1);
+
+  if (sin_th2 > 1) {
+    glm_vec3_copy(reflected_colour, *dest);
+    return;
+  }
+
+  RGB refracted_colour;
+  process_refraction(&refracted_colour, s, r, i, max_depth, recursion_depth - 1, cos_th1, sin_th2, mu1, mu2); 
+  float R0 = powf((mu1 - mu2) / (mu1 + mu2), 2);
+  float R = R0 + (1 - R0) * powf(1 - cos_th1, 5);
+
+  if (i->l == OUTER) {
+    glm_vec3_mul(refracted_colour, i->p->colour, refracted_colour);
+  }
+  
+  glm_vec3_scale(reflected_colour, R, reflected_colour);
+  glm_vec3_scale(refracted_colour, 1 - R, refracted_colour);
+  glm_vec3_add(reflected_colour, refracted_colour, *dest);
 }
 
 void process_diffuse(RGB *dest, const scene *s, const ray *r, const intsec *i) {
@@ -338,7 +409,7 @@ void process_metal(RGB *dest, const scene *s, const ray *r, const intsec *i, flo
 
 void process_ray(RGB *dest, const scene *s, const ray *r, float max_depth, size_t recursion_depth) {
   if (recursion_depth == 0) {
-    (*dest)[0] = 1;
+    (*dest)[0] = 0;
     (*dest)[1] = 0;
     (*dest)[2] = 0;
     return;
@@ -357,8 +428,7 @@ void process_ray(RGB *dest, const scene *s, const ray *r, float max_depth, size_
       process_metal(dest, s, r, &res, max_depth, recursion_depth);
       break;
     case MATERIAL_DIELECTRIC:
-      process_diffuse(dest, s, r, &res);
-      //process_dielectric();
+      process_dielectric(dest, s, r, &res, max_depth, recursion_depth);
       break;
     }
   }
