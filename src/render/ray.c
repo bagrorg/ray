@@ -247,7 +247,7 @@ void process_light(const scene *s, const ray *r, const intsec *i, RGB *dest) {
     // shift to prevent shadow acne
     vec3 shift;
     glm_vec3_copy(i->N, shift);
-    glm_vec3_scale(shift, 1e-5, shift);
+    glm_vec3_scale(shift, 1e-4, shift);
     glm_vec3_add(shift, light_ray.o, light_ray.o);
     
     intsec i_temp = intersect_ray(s, &light_ray, INFINITY);    
@@ -287,7 +287,7 @@ void process_light(const scene *s, const ray *r, const intsec *i, RGB *dest) {
     // shift to prevent shadow acne
     vec3 shift;
     glm_vec3_copy(i->N, shift);
-    glm_vec3_scale(shift, 1e-5, shift);
+    glm_vec3_scale(shift, 1e-4, shift);
     glm_vec3_add(shift, light_ray.o, light_ray.o);
 
     intsec i_temp = intersect_ray(s, &light_ray, R);
