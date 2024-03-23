@@ -28,6 +28,10 @@ static const char *LIGHT_INTENSITY = "LIGHT_INTENSITY";
 static const char *LIGHT_DIRECTION = "LIGHT_DIRECTION";
 static const char *LIGHT_POSITION = "LIGHT_POSITION";
 static const char *LIGHT_ATTENUATION = "LIGHT_ATTENUATION";
+static const char *RAY_DEPTH = "RAY_DEPTH";
+static const char *METALLIC = "METALLIC";
+static const char *DIELECTRIC = "DIELECTRIC";
+static const char *IOR = "IOR";
 
 
 void process_dimensions(char *line, scene *s) {
@@ -161,6 +165,7 @@ scene parse(const char *path) {
 			process_float(line, &s.cam.fov_x);
 		} else if (strncmp(NEW_PRIMITIVE, line, strlen(NEW_PRIMITIVE)) == 0) {
       p = push(&s.primitives);
+      p->material = MATERIAL_DIFFUSE;
       glm_vec3_copy(default_pos, p->position);
       glm_vec4_copy(default_rotation, p->rotation);
 		} else if (strncmp(PLANE, line, strlen(PLANE)) == 0) {
@@ -176,11 +181,23 @@ scene parse(const char *path) {
       process_vec3(line, &p->sizes); 
       p->type = PRIMITIVE_BOX;
 		} else if (strncmp(POSITION, line, strlen(POSITION)) == 0) {
+      RAY_VERIFY(p != NULL, "primitive is  NULL!!!");
       process_vec3(line, &p->position); 
 		} else if (strncmp(ROTATION, line, strlen(ROTATION)) == 0) {
+      RAY_VERIFY(p != NULL, "primitive is  NULL!!!");
       process_vec4(line, &p->rotation); 
 		} else if (strncmp(COLOUR, line, strlen(COLOUR)) == 0) {
+      RAY_VERIFY(p != NULL, "primitive is  NULL!!!");
       process_colour(line, &p->colour); 
+    } else if (strncmp(METALLIC, line, strlen(METALLIC)) == 0) {
+      RAY_VERIFY(p != NULL, "primitive is  NULL!!!");
+      p->material = MATERIAL_METAL;
+    } else if (strncmp(DIELECTRIC, line, strlen(DIELECTRIC)) == 0) {
+      RAY_VERIFY(p != NULL, "primitive is  NULL!!!");
+      p->material = MATERIAL_DIELECTRIC;
+    } else if (strncmp(IOR, line, strlen(IOR)) == 0) {
+      RAY_VERIFY(p != NULL, "primitive is  NULL!!!");
+      process_float(line, &p->ior); 
 		} else if (strncmp(NEW_LIGHT, line, strlen(NEW_LIGHT)) == 0) {
       lp = NULL;
       ld = NULL;

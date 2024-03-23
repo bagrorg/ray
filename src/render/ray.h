@@ -15,14 +15,13 @@ typedef enum {
 } loc;
 
 typedef struct {
-  RGB col;
+  const primitive *p;
+
   vec3 N;
   float t;
   loc l; 
-  bool succ;
 } intsec;
 
-void process_ray(intsec *res_glob, const scene *s, const ray *r, float max_depth);
 RGB *render(const scene *s);
 
 #endif

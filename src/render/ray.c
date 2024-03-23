@@ -39,7 +39,7 @@ void compute_int_point(const ray *r, float t, vec3 *P) {
 
 intsec intersect_box(const ray *r, const primitive *p) {
   intsec i = {
-    .succ = false
+    .p = NULL
   };
   ray adj_r;
   prepare_ray(r, &p->position, &p->rotation, &adj_r);
@@ -73,16 +73,14 @@ intsec intersect_box(const ray *r, const primitive *p) {
 	if (t1 >= 0) {
 		// t1 -- nearest solution
     i.t = t1;
-    glm_vec3_copy(p->colour, i.col);
-    i.succ = true;
+    i.p = p;
 	} else if (t2 >= 0) {
 		// t1 -- nearest solution
     i.t = t2;
-    glm_vec3_copy(p->colour, i.col);
-    i.succ = true;
+    i.p = p;
 	}
 
-  if (i.succ) {
+  if (i.p != NULL) {
     vec3 P;
     compute_int_point(&adj_r, i.t, &P);
     glm_vec3_div(P, p->sizes, P);
@@ -102,7 +100,7 @@ intsec intersect_box(const ray *r, const primitive *p) {
 
 intsec intersect_plane(const ray *r, const primitive *p) {
   intsec i = {
-    .succ = false,
+    .p = NULL
   };
   ray adj_r;
   prepare_ray(r, &p->position, &p->rotation, &adj_r);
@@ -110,9 +108,9 @@ intsec intersect_plane(const ray *r, const primitive *p) {
 	float t = -glm_vec3_dot(adj_r.o, p->normal) / glm_vec3_dot(adj_r.d, p->normal);
 	
 	if (t >= 0) {
-    i.succ = true;
+    i.p = p;
     i.t = t;
-    glm_vec3_copy(p->colour, i.col);
+
     glm_vec3_copy(p->normal, i.N);
     glm_vec3_normalize(i.N);
     postprocess_normal(&i.N, &p->rotation);
@@ -123,7 +121,7 @@ intsec intersect_plane(const ray *r, const primitive *p) {
 
 intsec intersect_ellipsoid(const ray *r, const primitive *p) {
   intsec i = {
-    .succ = false,
+    .p = NULL
   };
   ray adj_r;
   prepare_ray(r, &p->position, &p->rotation, &adj_r);
@@ -152,21 +150,19 @@ intsec intersect_ellipsoid(const ray *r, const primitive *p) {
 	if (t1 > 0) {
 		// t1 -- nearest solution
     i.t = t1;
-    i.succ = true;
+    i.p = p;
     i.l = OUTER;
-    glm_vec3_copy(p->colour, i.col);
 	} else if (t1 < 0 && t2 > 0) {
 		// inside sphere, t2 -- front solution
     i.t = t2;
-    i.succ = true;
+    i.p = p;
     i.l = INNER;
-    glm_vec3_copy(p->colour, i.col);
 	} else if (t2 < 0) {
 		// Sphere is behind, TODO delete this branch?
     return i;
 	}
 
-  if (i.succ) {
+  if (i.p != NULL) {
     vec3 P, R2;
     compute_int_point(&adj_r, i.t, &P);
     glm_vec3_mul(p->radius, p->radius, R2); 
@@ -185,11 +181,43 @@ void attenuation(vec3 I, vec3 C, float R) {
   glm_vec3_divs(I, w, I);
 }
 
+intsec intersect_ray(const scene *s, const ray *r, float max_depth) {
+  intsec res_glob = {
+    .p = NULL
+  };
+
+	for (size_t i = 0; i < s->primitives.size; i++) {
+    primitive *p = &((primitive*) s->primitives.data)[i];
+    intsec res;
+
+    switch (p->type) {
+      case PRIMITIVE_BOX:
+        res = intersect_box(r, p);  
+        break;
+      case PRIMITIVE_PLANE:
+        res = intersect_plane(r, p);
+        break;
+      case PRIMITIVE_ELLIPSOID:
+        res = intersect_ellipsoid(r, p);
+        break;
+    };
+
+		if (res.p != NULL && res.t <= max_depth) {
+			if ((res_glob.p != NULL && res.t < res_glob.t) || res_glob.p == NULL) {
+        res_glob = res;
+			}
+		}
+	}
+
+  return res_glob;
+}
+
 void process_light(const scene *s, const ray *r, const intsec *i, RGB *dest) {
   RGB col;
   vec3 sum = {(float) s->ambient[0] / 255, 
               (float) s->ambient[1] / 255, 
               (float) s->ambient[2] / 255};
+
   for (size_t l = 0; l < s->lights_directed.size; l++) {
     light_directed *ld = &((light_directed*)s->lights_directed.data)[l];
 
@@ -207,10 +235,9 @@ void process_light(const scene *s, const ray *r, const intsec *i, RGB *dest) {
     glm_vec3_scale(shift, 1e-5, shift);
     glm_vec3_add(shift, light_ray.o, light_ray.o);
     
-    intsec i_temp;
-    process_ray(&i_temp, s, &light_ray, INFINITY);    
+    intsec i_temp = intersect_ray(s, &light_ray, INFINITY);    
 
-    if (i_temp.succ) {
+    if (i_temp.p != NULL) {
       continue;
     }
     
@@ -247,9 +274,8 @@ void process_light(const scene *s, const ray *r, const intsec *i, RGB *dest) {
     glm_vec3_scale(shift, 1e-5, shift);
     glm_vec3_add(shift, light_ray.o, light_ray.o);
 
-    intsec i_temp;
-    process_ray(&i_temp, s, &light_ray, R);
-    if (i_temp.succ) {
+    intsec i_temp = intersect_ray(s, &light_ray, R);
+    if (i_temp.p != NULL) {
       continue;
     }
 
@@ -265,38 +291,81 @@ void process_light(const scene *s, const ray *r, const intsec *i, RGB *dest) {
     glm_vec3_add(sum, w, sum);
   }
 
-  glm_vec3_mul(i->col, sum, *dest);
+  glm_vec3_mul(i->p->colour, sum, *dest);
 }
 
-void process_ray(intsec *res_glob, const scene *s, const ray *r, float max_depth) {
-  res_glob->succ = false;
+void process_ray(RGB *dest, const scene *s, const ray *r, float max_depth, size_t recuesion_depth);
 
-	for (size_t i = 0; i < s->primitives.size; i++) {
-    primitive *p = &((primitive*) s->primitives.data)[i];
-    intsec res;
+void process_reflection(RGB *dest, const scene *s, const ray *r, const intsec *i, float max_depth, size_t recursion_depth) {
+  ray reflected_ray;
+  
+  // REFL.O = R->O + R->D * i->t + eps * i->N
+  glm_vec3_copy(r->d, reflected_ray.o);
+  glm_vec3_scale(reflected_ray.o, i->t, reflected_ray.o);
+  glm_vec3_add(r->o, reflected_ray.o, reflected_ray.o);
 
-    switch (p->type) {
-      case PRIMITIVE_BOX:
-        res = intersect_box(r, p);  
-        break;
-      case PRIMITIVE_PLANE:
-        res = intersect_plane(r, p);
-        break;
-      case PRIMITIVE_ELLIPSOID:
-        res = intersect_ellipsoid(r, p);
-        break;
-    };
+  vec3 shift;
+  glm_vec3_copy(i->N, shift);
+  glm_vec3_scale(shift, 1e-4, shift);
+  glm_vec3_add(shift, reflected_ray.o, reflected_ray.o);
 
-		if (res.succ && res.t <= max_depth) {
-			if ((res_glob->succ && res.t < res_glob->t) || !res_glob->succ) {
-        *res_glob = res;
-			}
-		}
-	}  
+  // REFL.D = R->D - 2 * i->N * <i->N, R->D>
+  glm_vec3_copy(i->N, reflected_ray.d);
+  glm_vec3_scale(reflected_ray.d, 
+                 -2 * glm_vec3_dot(r->d, i->N), 
+                 reflected_ray.d);
+  glm_vec3_add(reflected_ray.d, r->d, reflected_ray.d);
+  glm_vec3_normalize(reflected_ray.d);
+
+  process_ray(dest, s, &reflected_ray, max_depth, recursion_depth); 
 }
 
-void process_ray_regular(intsec *res_glob, const scene *s, const ray *r) {
-  process_ray(res_glob, s, r, INFINITY);
+void process_dielectric() {
+
+}
+
+void process_diffuse(RGB *dest, const scene *s, const ray *r, const intsec *i) {
+  process_light(s, r, i, dest);
+}
+
+
+void process_metal(RGB *dest, const scene *s, const ray *r, const intsec *i, float max_depth, size_t recursion_depth) {
+  process_reflection(dest, s, r, i, max_depth, recursion_depth - 1);
+  // Blend
+  glm_vec3_mul(i->p->colour, *dest, *dest);
+}
+
+
+void process_ray(RGB *dest, const scene *s, const ray *r, float max_depth, size_t recursion_depth) {
+  if (recursion_depth == 0) {
+    (*dest)[0] = 1;
+    (*dest)[1] = 0;
+    (*dest)[2] = 0;
+    return;
+  }
+  intsec res = intersect_ray(s, r, max_depth);
+
+  if (res.p == NULL) {
+    glm_vec3_copy(s->bg, *dest);
+  } else {
+    
+    switch (res.p->material) {
+    case MATERIAL_DIFFUSE:
+      process_diffuse(dest, s, r, &res);
+      break;
+    case MATERIAL_METAL:
+      process_metal(dest, s, r, &res, max_depth, recursion_depth);
+      break;
+    case MATERIAL_DIELECTRIC:
+      process_diffuse(dest, s, r, &res);
+      //process_dielectric();
+      break;
+    }
+  }
+}
+
+void process_ray_regular(RGB *dest, const scene *s, const ray *r, size_t recursion_depth) {
+  process_ray(dest, s, r, INFINITY, recursion_depth);
 }
 
 RGB *render(const scene *s) {
@@ -324,16 +393,7 @@ RGB *render(const scene *s) {
 
       glm_vec3_normalize(r.d);
 
-      intsec res;
-			process_ray_regular(&res, s, &r);
-
-      if (res.succ) {
-        RGB col;
-        process_light(s, &r, &res, &col);
-        glm_vec3_copy(col, render[x + y * s->cam.w]);
-      } else {
-        glm_vec3_copy(s->bg, render[x + y * s->cam.w]);
-      }
+			process_ray_regular(&render[x + y * s->cam.w], s, &r, 8);//TODO
 		}
 	}
 

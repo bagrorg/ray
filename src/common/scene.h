@@ -18,12 +18,20 @@ typedef enum {
   PRIMITIVE_ELLIPSOID
 } primitive_type;
 
+typedef enum {
+  MATERIAL_DIFFUSE,
+  MATERIAL_METAL,
+  MATERIAL_DIELECTRIC,
+} primitive_material;
+
 typedef struct {
   primitive_type type;
+  primitive_material material;
 
 	vec3 position;	
 	vec4 rotation;	
 	RGB colour;			
+  float ior;
   
   union {
     vec3 normal;
