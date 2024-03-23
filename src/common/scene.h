@@ -76,7 +76,8 @@ typedef struct {
   vector primitives;
   vector lights_directed;
   vector lights_point;
-
+  
+  size_t rec_depth;
 } scene;
 
 

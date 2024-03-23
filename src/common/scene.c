@@ -3,8 +3,7 @@
 #include <stdio.h>
 #include <malloc.h>
 
-void print_RGB(RGB rgb) {
-	printf("(%f, %f, %f)", rgb[0], rgb[1], rgb[2]);
+void print_RGB(RGB rgb) { printf("(%f, %f, %f)", rgb[0], rgb[1], rgb[2]);
 }
 
 void print_vec3(const vec3 v) {
@@ -27,6 +26,8 @@ void print_common_data(const primitive *p) {
 	printf("\t\t\tcolor = ");
 	print_RGB(p->colour);
 	printf("\n");
+
+  printf("\t\t\tmaterial = %d\n", p->material);
 }
 
 void print_planes(const primitive *p) {
@@ -116,6 +117,7 @@ void print_scene(const scene *s) {
 	printf("SCENE:\n\tbackground = ");
 	print_RGB(s->bg);	
 	printf("\n");
+  printf("RAY_DEPTH = %zull", s->rec_depth);
 	printf("\n");
 
 	print_cam(&s->cam);

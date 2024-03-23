@@ -85,7 +85,7 @@ intsec intersect_box(const ray *r, const primitive *p) {
     compute_int_point(&adj_r, i.t, &P);
     glm_vec3_div(P, p->sizes, P);
     for (size_t i = 0; i < 3; i++) {
-      if (fabs(P[i] - 1.0) > 0.00001) {
+      if (fabs(fabs(P[i]) - 1.0) > 0.00001) {
         P[i] = 0.0;
       }
     }
@@ -222,6 +222,7 @@ void process_light(const scene *s, const ray *r, const intsec *i, RGB *dest) {
               (float) s->ambient[1] / 255, 
               (float) s->ambient[2] / 255};
 
+  // Direction lights processing
   for (size_t l = 0; l < s->lights_directed.size; l++) {
     light_directed *ld = &((light_directed*)s->lights_directed.data)[l];
 
@@ -254,7 +255,8 @@ void process_light(const scene *s, const ray *r, const intsec *i, RGB *dest) {
     glm_vec3_scale(ld->intensity, light_dot, w);
     glm_vec3_add(sum, w, sum);
   }
-
+  
+  // Point lights processing
   for (size_t l = 0; l < s->lights_point.size; l++) {
     light_point *lp = &((light_point*)s->lights_point.data)[l];
 
@@ -463,7 +465,7 @@ RGB *render(const scene *s) {
 
       glm_vec3_normalize(r.d);
 
-			process_ray_regular(&render[x + y * s->cam.w], s, &r, 8);//TODO
+			process_ray_regular(&render[x + y * s->cam.w], s, &r, s->rec_depth);//TODO
 		}
 	}
 

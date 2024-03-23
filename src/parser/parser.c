@@ -58,6 +58,16 @@ void process_float(char *line, float *dst) {
 	*dst = atof(token);
 }
 
+void process_size_t(char *line, size_t *dst) {
+	char *token = strtok(line, " ");
+	
+	RAY_VERIFY(token != NULL, "Size_t line has less than 1 argument!");
+
+	token = strtok(NULL, " ");
+	RAY_VERIFY(token != NULL, "Size_t line has less than 1 argument!");
+	*dst = atoll(token);
+}
+
 void process_colour(char *line, RGB *dst) {
 	float val;
 	char *token = strtok(line, " ");
@@ -198,6 +208,8 @@ scene parse(const char *path) {
     } else if (strncmp(IOR, line, strlen(IOR)) == 0) {
       RAY_VERIFY(p != NULL, "primitive is  NULL!!!");
       process_float(line, &p->ior); 
+    } else if (strncmp(RAY_DEPTH, line, strlen(RAY_DEPTH)) == 0) {
+      process_size_t(line, &s.rec_depth); 
 		} else if (strncmp(NEW_LIGHT, line, strlen(NEW_LIGHT)) == 0) {
       lp = NULL;
       ld = NULL;
